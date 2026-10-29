@@ -1,0 +1,286 @@
+# =============================================================================
+# docker-compose.yml
+#
+# Full distributed storage stack:
+#   - etcd                  : metadata key-value store
+#   - metadata (heartbeat stub) : accepts heartbeats from storage nodes
+#   - storage_node1–4       : content-addressed chunk stores (Task 1)
+#   - gateway               : S3-compatible API gateway (Task 2)
+#
+# Usage:
+#   docker compose up --build -d    # build & start everything detached
+#   docker compose down -v          # stop and remove volumes
+#   docker compose logs -f gateway  # tail gateway logs
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  chunks_node1:
+  chunks_node2:
+  chunks_node3:
+  chunks_node4:
+  etcd_data:
+
+# ---------------------------------------------------------------------------
+# Shared network
+# ---------------------------------------------------------------------------
+networks:
+  storage_net:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# YAML anchors
+# ---------------------------------------------------------------------------
+x-storage-node-base: &storage-node-base
+  build:
+    context: ./storage_node
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  networks:
+    - storage_net
+  environment:
+    METADATA_SERVICE_URL: "http://metadata:8001"
+    HEARTBEAT_INTERVAL: "5"
+    STORAGE_DIR: "/data/chunks"
+    GATEWAY_URL: "http://gateway:9000"
+    SCRUB_INTERVAL: "60"
+  healthcheck:
+    test:
+      - "CMD"
+      - "python"
+      - "-c"
+      - "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:8000/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"
+    interval: 15s
+    timeout: 5s
+    start_period: 10s
+    retries: 3
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # --------------------------------------------------------------------------
+  # etcd — distributed key-value store for object metadata
+  # --------------------------------------------------------------------------
+  etcd:
+    image: gcr.io/etcd-development/etcd:v3.5.0
+    container_name: etcd
+    networks:
+      - storage_net
+    ports:
+      - "12379:2379"
+      - "12380:2380"
+    environment:
+      ETCD_DATA_DIR: "/etcd-data"
+      ETCD_NAME: "node1"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_LISTEN_PEER_URLS: "http://0.0.0.0:2380"
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: "http://etcd:2380"
+      ETCD_INITIAL_CLUSTER: "node1=http://etcd:2380"
+      ETCD_INITIAL_CLUSTER_STATE: "new"
+      ETCD_INITIAL_CLUSTER_TOKEN: "storage-cluster"
+    volumes:
+      - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Heartbeat stub — accepts POST /heartbeat from storage nodes
+  # --------------------------------------------------------------------------
+  metadata:
+    image: python:3.12-slim
+    container_name: metadata_service
+    networks:
+      - storage_net
+    ports:
+      - "8001:8001"
+    command:
+      - "python"
+      - "-c"
+      - "from http.server import BaseHTTPRequestHandler, HTTPServer;\nclass H(BaseHTTPRequestHandler):\n    def log_message(self, f, *a): pass\n    def do_GET(self):\n        self.send_response(200); self.end_headers(); self.wfile.write(b'ok')\n    def do_POST(self):\n        n=int(self.headers.get('Content-Length',0)); b=self.rfile.read(n)\n        print('[metadata] heartbeat:', b.decode(), flush=True)\n        self.send_response(200); self.end_headers()\nHTTPServer(('0.0.0.0', 8001), H).serve_forever()"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # --------------------------------------------------------------------------
+  # Storage Nodes 1–4
+  # --------------------------------------------------------------------------
+  storage_node1:
+    <<: *storage-node-base
+    container_name: storage_node1
+    environment:
+      NODE_ID: "node-1"
+      METADATA_SERVICE_URL: "http://metadata:8001"
+      HEARTBEAT_INTERVAL: "5"
+      STORAGE_DIR: "/data/chunks"
+    ports:
+      - "8101:8000"
+    volumes:
+      - chunks_node1:/data/chunks
+    depends_on:
+      metadata:
+        condition: service_healthy
+
+  storage_node2:
+    <<: *storage-node-base
+    container_name: storage_node2
+    environment:
+      NODE_ID: "node-2"
+      METADATA_SERVICE_URL: "http://metadata:8001"
+      HEARTBEAT_INTERVAL: "5"
+      STORAGE_DIR: "/data/chunks"
+    ports:
+      - "8102:8000"
+    volumes:
+      - chunks_node2:/data/chunks
+    depends_on:
+      metadata:
+        condition: service_healthy
+
+  storage_node3:
+    <<: *storage-node-base
+    container_name: storage_node3
+    environment:
+      NODE_ID: "node-3"
+      METADATA_SERVICE_URL: "http://metadata:8001"
+      HEARTBEAT_INTERVAL: "5"
+      STORAGE_DIR: "/data/chunks"
+    ports:
+      - "8103:8000"
+    volumes:
+      - chunks_node3:/data/chunks
+    depends_on:
+      metadata:
+        condition: service_healthy
+
+  storage_node4:
+    <<: *storage-node-base
+    container_name: storage_node4
+    environment:
+      NODE_ID: "node-4"
+      METADATA_SERVICE_URL: "http://metadata:8001"
+      HEARTBEAT_INTERVAL: "5"
+      STORAGE_DIR: "/data/chunks"
+    ports:
+      - "8104:8000"
+    volumes:
+      - chunks_node4:/data/chunks
+    depends_on:
+      metadata:
+        condition: service_healthy
+
+  # --------------------------------------------------------------------------
+  # API Gateway (Task 2/4 — existing)
+  # --------------------------------------------------------------------------
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: gateway
+    networks:
+      - storage_net
+    ports:
+      - "9000:9000"
+    environment:
+      ETCD_HOST: "etcd"
+      ETCD_PORT: "2379"
+      CHUNKING_MODE: "fixed"
+      CHUNK_SIZE: "4194304"
+      REPLICATION_FACTOR: "3"
+      WRITE_QUORUM: "2"
+      READ_QUORUM: "2"
+      FAILURE_THRESHOLD: "15"
+      FAILURE_CHECK_INTERVAL: "5"
+      REPAIR_INTERVAL: "30"
+      DEFAULT_ERASURE_K: "2"
+      DEFAULT_ERASURE_M: "2"
+      GATEWAY_PORT: "9000"
+      STORAGE_NODES: "node-1=http://storage_node1:8000,node-2=http://storage_node2:8000,node-3=http://storage_node3:8000,node-4=http://storage_node4:8000"
+    depends_on:
+      etcd:
+        condition: service_healthy
+      storage_node1:
+        condition: service_healthy
+      storage_node2:
+        condition: service_healthy
+      storage_node3:
+        condition: service_healthy
+      storage_node4:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:9000/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Production API Gateway (Task 5 — JWT, Rate Limiting, Search, Observability)
+  # --------------------------------------------------------------------------
+  api_gateway:
+    build:
+      context: ./api_gateway
+      dockerfile: Dockerfile
+    container_name: api_gateway
+    networks:
+      - storage_net
+    ports:
+      - "9100:9100"
+    environment:
+      ETCD_HOST: "etcd"
+      ETCD_PORT: "2379"
+      GATEWAY_PORT: "9100"
+      JWT_SECRET_KEY: "change-me-in-production-please"
+      JWT_ALGORITHM: "HS256"
+      JWT_EXPIRE_MINS: "60"
+      REPLICATION_FACTOR: "3"
+      WRITE_QUORUM: "2"
+      READ_QUORUM: "2"
+      CHUNK_SIZE: "4194304"
+      RATE_LIMIT: "120/minute"
+      ADMIN_PASSWORD: "adminpass"
+      USER1_PASSWORD: "userpass"
+      STORAGE_NODES: "node-1=http://storage_node1:8000,node-2=http://storage_node2:8000,node-3=http://storage_node3:8000,node-4=http://storage_node4:8000"
+    depends_on:
+      etcd:
+        condition: service_healthy
+      storage_node1:
+        condition: service_healthy
+      storage_node2:
+        condition: service_healthy
+      storage_node3:
+        condition: service_healthy
+      storage_node4:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:9100/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped

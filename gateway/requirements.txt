@@ -1,0 +1,8 @@
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+httpx==0.27.0
+etcd3==0.12.0
+grpcio==1.62.2
+protobuf==3.20.3
+python-multipart==0.0.9
+zfec==1.6.0.0
