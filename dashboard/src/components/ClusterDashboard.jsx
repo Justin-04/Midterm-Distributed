@@ -50,7 +50,12 @@ export default function ClusterDashboard() {
       setRing(rs.data);
       setLast(new Date().toLocaleTimeString());
     } catch (e) {
-      console.error(e);
+      console.error("Cluster load error:", e?.response?.status, e?.message);
+      // If 401, token expired — clear it so user gets redirected to login
+      if (e?.response?.status === 401) {
+        localStorage.removeItem("jwt_token");
+        window.location.reload();
+      }
     } finally {
       setLoading(false);
     }

@@ -6,11 +6,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": {
-        target: "http://localhost:9100",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
+      "/auth": { target: "http://localhost:9100", changeOrigin: true },
+      "/buckets": { target: "http://localhost:9100", changeOrigin: true },
+      "/search": { target: "http://localhost:9100", changeOrigin: true },
+      "/cluster": { target: "http://localhost:9100", changeOrigin: true },
+      "/ring":    { target: "http://localhost:9100", changeOrigin: true },
     },
   },
 });

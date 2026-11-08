@@ -7,7 +7,7 @@ import os
 
 # ── etcd ─────────────────────────────────────────────────────────────────────
 ETCD_HOST: str = os.getenv("ETCD_HOST", "localhost")
-ETCD_PORT: int = int(os.getenv("ETCD_PORT", "2379"))
+ETCD_PORT: int = int(os.getenv("ETCD_PORT", "12379"))
 
 # ── Storage nodes ─────────────────────────────────────────────────────────────
 # Comma-separated  node_id=http://host:port  pairs

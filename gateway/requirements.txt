@@ -6,3 +6,4 @@ grpcio==1.62.2
 protobuf==3.20.3
 python-multipart==0.0.9
 zfec==1.6.0.0
+prometheus-fastapi-instrumentator==6.1.0

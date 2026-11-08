@@ -65,9 +65,8 @@ from quorum import quorum_write, quorum_read, quorum_delete
 from erasure import encode_chunk, decode_chunk, verify_shard, ErasureConfig
 from failure_detector import FailureDetector
 from repair_worker import RepairWorker
+from prometheus_fastapi_instrumentator import Instrumentator
 
-# ---------------------------------------------------------------------------
-# Logging
 # ---------------------------------------------------------------------------
 
 logging.basicConfig(
@@ -206,6 +205,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Wire Prometheus metrics — exposes /metrics endpoint
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 # ---------------------------------------------------------------------------
 # Replication-mode helpers

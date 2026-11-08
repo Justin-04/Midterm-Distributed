@@ -33,6 +33,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, Response as FastAPIResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from heartbeat import heartbeat_loop
 from storage import (
@@ -165,6 +166,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Wire Prometheus metrics — exposes /metrics endpoint
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
 # ---------------------------------------------------------------------------

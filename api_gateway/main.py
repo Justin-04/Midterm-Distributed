@@ -32,6 +32,7 @@ from config import (
 )
 from limiter import limiter
 from ring import ConsistentHashRing
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from auth import router as auth_router
 from routers.buckets import router as buckets_router
@@ -92,10 +93,20 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",   # Vite dev server
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "*",                        # allow all for local dev
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# ── Prometheus metrics — MUST be wired before routers ────────────────────────
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
 app.state.limiter = limiter

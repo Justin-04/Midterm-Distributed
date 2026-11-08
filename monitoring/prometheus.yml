@@ -1,0 +1,38 @@
+global:
+  scrape_interval:     10s
+  evaluation_interval: 10s
+
+scrape_configs:
+
+  # Core gateway (port 9000 — quorum/erasure gateway, workload traffic target)
+  - job_name: "gateway"
+    static_configs:
+      - targets: ["gateway:9000"]
+    metrics_path: "/metrics"
+
+  # API Gateway (FastAPI + prometheus-fastapi-instrumentator)
+  - job_name: "api_gateway"
+    static_configs:
+      - targets: ["api_gateway:9100"]
+    metrics_path: "/metrics"
+
+  # Storage nodes — each exposes /metrics via the same instrumentator
+  - job_name: "storage_nodes"
+    static_configs:
+      - targets:
+          - "storage_node1:8000"
+          - "storage_node2:8000"
+          - "storage_node3:8000"
+          - "storage_node4:8000"
+    metrics_path: "/metrics"
+
+  # etcd built-in metrics
+  - job_name: "etcd"
+    static_configs:
+      - targets: ["etcd:2379"]
+    metrics_path: "/metrics"
+
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

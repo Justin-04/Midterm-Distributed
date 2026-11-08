@@ -1,0 +1,149 @@
+{
+  "title": "DistStore — Distributed Storage",
+  "uid": "diststore-main",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Total HTTP Requests",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(increase(http_requests_total{job=\"api_gateway\"}[30m]))",
+        "legendFormat": "Total Requests"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" },
+        "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":500},{"color":"red","value":2000}]}}}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Request Error Rate",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "100 * sum(rate(http_requests_total{job=~\"gateway|api_gateway\",status=~\"5..\"}[5m])) / (sum(rate(http_requests_total{job=~\"gateway|api_gateway\"}[5m])) > 0) or vector(0)",
+        "legendFormat": "Error %"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "percent",
+        "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":1},{"color":"red","value":5}]}}}
+    },
+    {
+      "id": 3, "type": "stat", "title": "P95 Latency (gateway)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"gateway|api_gateway\"}[5m])) by (le))",
+        "legendFormat": "p95"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "s",
+        "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":0.5},{"color":"red","value":2}]}}}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Active Storage Nodes",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "sum(up{job=\"storage_nodes\"})",
+        "legendFormat": "Nodes Up"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": {
+        "thresholds": { "steps": [{"color":"red","value":0},{"color":"yellow","value":2},{"color":"green","value":4}]}}}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "HTTP Request Rate by Method",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=~\"gateway|api_gateway\"}[1m])) by (method)",
+        "legendFormat": "{{method}}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "reqps" }}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Request Latency Percentiles (gateway)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=~\"gateway|api_gateway\"}[5m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.90, sum(rate(http_request_duration_seconds_bucket{job=~\"gateway|api_gateway\"}[5m])) by (le))", "legendFormat": "p90" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=~\"gateway|api_gateway\"}[5m])) by (le))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Storage Node — Up/Down",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "up{job=\"storage_nodes\",instance=\"storage_node1:8000\"}",
+        "legendFormat": "storage_node1:8000"
+      },{
+        "expr": "up{job=\"storage_nodes\",instance=\"storage_node2:8000\"}",
+        "legendFormat": "storage_node2:8000"
+      },{
+        "expr": "up{job=\"storage_nodes\",instance=\"storage_node3:8000\"}",
+        "legendFormat": "storage_node3:8000"
+      },{
+        "expr": "up{job=\"storage_nodes\",instance=\"storage_node4:8000\"}",
+        "legendFormat": "storage_node4:8000"
+      }],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1,
+        "thresholds": { "steps": [{"color":"red","value":0},{"color":"green","value":1}]}}}
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "HTTP Status Code Distribution",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=~\"gateway|api_gateway\"}[1m])) by (status)",
+        "legendFormat": "HTTP {{status}}"
+      }]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "Gateway CPU Usage",
+      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "sum(rate(process_cpu_seconds_total{job=~\"gateway|api_gateway\"}[1m])) by (job) * 100",
+        "legendFormat": "{{job}} CPU %"
+      }],
+      "fieldConfig": { "defaults": { "unit": "percent" }}
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Gateway Memory (RSS)",
+      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 6 },
+      "targets": [{
+        "expr": "process_resident_memory_bytes{job=~\"gateway|api_gateway\"}",
+        "legendFormat": "{{job}} RSS"
+      }],
+      "fieldConfig": { "defaults": { "unit": "bytes" }}
+    },
+    {
+      "id": 11, "type": "stat", "title": "Gateway Uptime",
+      "gridPos": { "x": 0, "y": 24, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "process_start_time_seconds{job=\"gateway\"}",
+        "legendFormat": "Start Time"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "dateTimeFromNow",
+        "thresholds": { "steps": [{"color":"green","value":0}]}}}
+    },
+    {
+      "id": 12, "type": "stat", "title": "Total etcd Keys",
+      "gridPos": { "x": 6, "y": 24, "w": 6, "h": 4 },
+      "targets": [{
+        "expr": "etcd_debugging_mvcc_keys_total",
+        "legendFormat": "Keys"
+      }],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": {
+        "thresholds": { "steps": [{"color":"blue","value":0}]}}}
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "etcd Disk Size",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 4 },
+      "targets": [{
+        "expr": "etcd_mvcc_db_total_size_in_bytes",
+        "legendFormat": "DB Size"
+      }],
+      "fieldConfig": { "defaults": { "unit": "bytes" }}
+    }
+  ]
+}
